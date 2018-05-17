@@ -67,6 +67,7 @@ gaz <- gaz %>%
   filter(PRIM_LAT_DEC != 0, PRIM_LONG_DEC != 0)
 
 gaz$FEATURE_NAME <- as.factor(gaz$FEATURE_NAME) # Type convert to a factor
+gaz$FEATURE_CLASS <- as.factor(gaz$FEATURE_CLASS) # Type convert to a factor
 #View(gaz)
 
 ```
@@ -150,30 +151,11 @@ copy_to(gaz.db, types, "types",
   overwrite = TRUE
 )
 
-View(types)
-gaz_db <- tbl(gaz.db, "gaz")
-gaz_db
+# Join types to gaz table and select desired columns
+class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, gaz.COUNTY_NAME, types.Class_Type FROM gaz JOIN types ON gaz.FEATURE_CLASS = types.FEATURE_CLASS;")
+head(class_types)
 
 ```
-
-
-
-# Count and arrange names in descending order
-count_names <- gaz %>%
-  group_by(FEATURE_NAME) %>% 
-  summarize(n_names = n()) %>% 
-  arrange(desc(n_names))
-
-count_names
-
-foo <- flights_db %>% select(year:day, dep_delay, arr_delay)
-foo %>% show_query() # This shows you what SQL R used to create the tibble you requested
-
-count_names <- gaz_db %>%
-  group_by(FEATURE_NAME) %>% 
-  summarize(n_names = n()) %>% 
-  arrange(desc(n_names))
-count_names %>% show_query()
 
 
 
