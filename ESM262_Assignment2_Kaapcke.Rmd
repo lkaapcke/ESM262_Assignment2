@@ -1,0 +1,98 @@
+---
+title: "ESM 262 HW 2"
+author: "Lauren Kaapcke"
+date: "May 17, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import and Tidy
+
+1. Load tidyverse and read gazetteer data into a tibble. 
+
+```{r tools_data, warning = F, message = F}
+
+library(tidyverse)
+library(knitr)
+
+#Read in data
+gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Features_20180401.txt", delim = "|", col_names = T, col_types = cols(.default = col_character())))
+#summary(gaz_raw)
+
+```
+
+2. Select desired columns.
+
+```{r table, warning = F, message = F}
+
+gaz <- gaz_raw %>% 
+  select(FEATURE_ID:STATE_ALPHA, COUNTY_NAME, ends_with("_DEC"), ELEV_IN_M, MAP_NAME:DATE_EDITED)
+#View(gaz)
+
+```
+
+3. Convert the columns to the appropriate type. Convert unknown placeholders to NA. 
+
+```{r convert, warning = F, message = F}
+
+#Replace "Unknown" with "NA"
+is.na(gaz) <- gaz == "Unknown"
+
+#Convert columns
+gaz <- type_convert(gaz, col_types = cols( 
+  FEATURE_ID = col_double(),
+  PRIM_LAT_DEC = col_double(),
+  PRIM_LONG_DEC = col_double(),
+  SOURCE_LAT_DEC = col_double(),
+  SOURCE_LONG_DEC = col_double(),
+  ELEV_IN_M = col_double(),
+  DATE_CREATED = col_date(format = "%m/%d/%Y"),
+  DATE_EDITED = col_date(format = "%m/%d/%Y")
+))
+#head(gaz) #Check conversion worked
+
+```
+
+4. Delete rows with NA for primary longitude or latitude or where the feature is not California.
+
+```{r filter, message = F, warning = F}
+
+gaz <- gaz %>%
+  filter(STATE_ALPHA == "CA") %>% 
+  filter(PRIM_LAT_DEC != 0, PRIM_LONG_DEC != 0)
+#View(gaz)
+
+```
+
+5. Create a connect to the gaz.db and copy the tibble into the database.
+
+```{r database, messsage = F, warning = F}
+
+gaz.db <- DBI::dbConnect(RSQLite::SQLite(), path = ":memory:")
+
+copy_to(gaz.db, gaz, "gaz",
+  temporary = FALSE, 
+  overwrite = TRUE,
+  indexes = list(
+    "FEATURE_ID", "FEATURE_NAME"
+  )
+)
+
+gaz_db <- tbl(gaz.db, "gaz")
+gaz_db
+
+```
+
+
+
+
+
+
+
+
+
+
+
