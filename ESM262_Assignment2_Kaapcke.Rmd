@@ -17,6 +17,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(knitr)
+library(DBI)
+library(dplyr)
 
 #Read in data
 gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Features_20180401.txt", delim = "|", col_names = T, col_types = cols(.default = col_character())))
@@ -63,6 +65,8 @@ gaz <- type_convert(gaz, col_types = cols(
 gaz <- gaz %>%
   filter(STATE_ALPHA == "CA") %>% 
   filter(PRIM_LAT_DEC != 0, PRIM_LONG_DEC != 0)
+
+gaz$FEATURE_NAME <- as.factor(gaz$FEATURE_NAME) # Type convert to a factor
 #View(gaz)
 
 ```
@@ -73,23 +77,68 @@ gaz <- gaz %>%
 
 gaz.db <- DBI::dbConnect(RSQLite::SQLite(), path = ":memory:")
 
-copy_to(gaz.db, gaz, "gaz",
+copy_to(gaz.db, gaz, "gaz", # What does the "::" mean?
   temporary = FALSE, 
   overwrite = TRUE,
   indexes = list(
-    "FEATURE_ID", "FEATURE_NAME"
+    "FEATURE_ID", "FEATURE_NAME" 
   )
 )
 
+# Create a table cookie that connects to the database
 gaz_db <- tbl(gaz.db, "gaz")
 gaz_db
 
 ```
 
+##Analyze the Data with SQL
+
+1. What is the most frequently ocurring feature name?
+
+```{r feature_name, message = F, warning = F}
+
+count_names <- dbGetQuery(gaz.db, "SELECT FEATURE_NAME, COUNT() AS n_names FROM gaz
+           GROUP BY FEATURE_NAME
+           ORDER BY n_names DESC;")
+
+count_names
+
+```
+
+The feature name that appears the most often is "Church of Christ".
+
+2. What is the least-frequently-occuring feature class?
+
+```{r feature_class, message = F, warning = F}
+
+count_class <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS, COUNT() AS n_classes FROM gaz
+                          GROUP BY FEATURE_CLASS
+                          ORDER BY n_classes;")
+count_class
+```
+
+The feature classes that appear the least are "Sea" and "Isthmus".
 
 
 
 
+
+# Count and arrange names in descending order
+count_names <- gaz %>%
+  group_by(FEATURE_NAME) %>% 
+  summarize(n_names = n()) %>% 
+  arrange(desc(n_names))
+
+count_names
+
+foo <- flights_db %>% select(year:day, dep_delay, arr_delay)
+foo %>% show_query() # This shows you what SQL R used to create the tibble you requested
+
+count_names <- gaz_db %>%
+  group_by(FEATURE_NAME) %>% 
+  summarize(n_names = n()) %>% 
+  arrange(desc(n_names))
+count_names %>% show_query()
 
 
 
