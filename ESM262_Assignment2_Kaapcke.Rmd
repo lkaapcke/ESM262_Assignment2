@@ -119,7 +119,42 @@ count_class
 
 The feature classes that appear the least are "Sea" and "Isthmus".
 
+3. What is the approximate center point of each county?
 
+Instead of finding the bounding box and calculating the center point, I chose to take the average latitude and longitude for each county. With such a large sample size for each county, this should be close to center point.
+
+```{r center}
+
+county_center <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County Name', AVG(PRIM_LAT_DEC) AS 'Center Latitude', AVG(PRIM_LONG_DEC) AS 'Center Longitude' FROM gaz GROUP BY COUNTY_NAME;")
+county_center
+
+```
+
+4. What are the fractions of the total number of features in each county that are natural vs. man-made?
+
+```{r fractions}
+
+# Isolate the unique feature classes
+classes <- gaz %>% 
+  distinct(FEATURE_CLASS) %>% 
+  arrange(FEATURE_CLASS)
+
+# Create a new tibble that defines each class as natural or manmade
+types <- mutate(classes,
+                Class_Type = c("Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Natural", "Manmade", "Manmade", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Natural", "Manmade", "Natural")
+)
+
+# Import types into database
+copy_to(gaz.db, types, "types",
+  temporary = FALSE, 
+  overwrite = TRUE
+)
+
+View(types)
+gaz_db <- tbl(gaz.db, "gaz")
+gaz_db
+
+```
 
 
 
