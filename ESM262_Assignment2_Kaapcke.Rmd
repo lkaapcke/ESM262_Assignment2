@@ -153,11 +153,31 @@ copy_to(gaz.db, types, "types",
 
 # Join types to gaz table and select desired columns
 class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, gaz.COUNTY_NAME, types.Class_Type FROM gaz JOIN types ON gaz.FEATURE_CLASS = types.FEATURE_CLASS;")
-head(class_types)
+# head(class_types)
+
+copy_to(gaz.db, class_types, "class_types",
+  temporary = FALSE, 
+  overwrite = TRUE
+)
+
+# Find the fractions of manmade vs. natural features for each county
+feature_fractions <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS, count(FEATURE_CLASS) FROM class_types WHERE Class_Type ='Manmade' GROUP BY COUNTY_NAME;")
+feature_fractions
+
+# I had trouble getting past this point
 
 ```
 
+SELECT count(reading) FROM Survey WHERE quant='sal';
 
+feature_fractions <- class_types %>%
+  group_by(COUNTY_NAME) %>% 
+  summarize(Manmade = sum(Class_Type == "Manmade"), Natural = sum(Class_Type == "Natural")) %>% 
+  mutate(
+    Fraction_Manmade = (Manmade / (Manmade + Natural)),
+    Fraction_Natural = 1 - Fraction_Manmade
+  ) %>% 
+  select(COUNTY_NAME, Fraction_Manmade, Fraction_Natural)
 
 
 
