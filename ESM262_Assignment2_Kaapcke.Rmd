@@ -199,49 +199,20 @@ show_query(class_types)
 features <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type) AS 'Manmade' FROM class_types_db WHERE Class_Type = 'Manmade' AND COUNTY_NAME != 'NA' GROUP BY COUNTY_NAME;")
 features
 
+features3 <- dbGetQuery(gaz.db, "SELECT class_types_db.COUNTY_NAME AS 'County', count(class_types_db.Class_Type) AS 'Manmade' FROM class_types_db WHERE class_types_db.Class_Type = 'Manmade' AND class_types_db.COUNTY_NAME != 'NA' GROUP BY class_types_db.COUNTY_NAME
+                        JOIN (SELECT count(class_types_db.Class_Type) AS 'Natural' 
+                        FROM class_types_db 
+                        WHERE class_types_db.Class_Type = 'Natural' 
+                        AND class_types_db.COUNTY_NAME != 'NA' 
+                        GROUP BY class_types_db.COUNTY_NAME)
+                        ON class_types_db.COUNTY_NAME = class_types_db.COUNTY_NAME;")
 
 
-#SELECT sum(reading) FROM Survey WHERE quant='sal';
+features3
+
+# I think the way to solve this is with subqueries, but I cannot get it to work.
+
 ```
-
-If you divided 2 integers in SQL, the result is also an integer; i.e., the fractional part is discarded. (For example, 9 / 10 is 0). To get a fractional result in such a situation, you have to convert at least one of the integer operands to a real number using the CAST function, like so:
-SELECT CAST(n_natural AS REAL) / total AS fraction_natural
-
-What are the fractions of the total number of features in each county that are natural? man-made?
-
-select manmade features in each county, divide by total features in each county, report as fraction
-report natural fraction as 1-manmade
-
-Columns: 
-county, fraction manmade, fraction natural
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
