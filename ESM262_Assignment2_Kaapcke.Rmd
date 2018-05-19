@@ -155,6 +155,7 @@ copy_to(gaz.db, types, "types",
 class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, gaz.COUNTY_NAME, types.Class_Type FROM gaz JOIN types ON gaz.FEATURE_CLASS = types.FEATURE_CLASS;")
 # head(class_types)
 
+# Put new table in database
 copy_to(gaz.db, class_types, "class_types",
   temporary = FALSE, 
   overwrite = TRUE
@@ -166,18 +167,12 @@ feature_fractions
 
 # I had trouble getting past this point
 
+# In order to get showquery to work, the code must be done on the table that exists in the database
+# Copy HW2, put table in DB and run the same code
+
 ```
 
-SELECT count(reading) FROM Survey WHERE quant='sal';
 
-feature_fractions <- class_types %>%
-  group_by(COUNTY_NAME) %>% 
-  summarize(Manmade = sum(Class_Type == "Manmade"), Natural = sum(Class_Type == "Natural")) %>% 
-  mutate(
-    Fraction_Manmade = (Manmade / (Manmade + Natural)),
-    Fraction_Natural = 1 - Fraction_Manmade
-  ) %>% 
-  select(COUNTY_NAME, Fraction_Manmade, Fraction_Natural)
 
 
 
