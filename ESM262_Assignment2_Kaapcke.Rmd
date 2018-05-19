@@ -22,7 +22,6 @@ library(dplyr)
 
 #Read in data
 gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Features_20180401.txt", delim = "|", col_names = T, col_types = cols(.default = col_character())))
-#summary(gaz_raw)
 
 ```
 
@@ -32,7 +31,6 @@ gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Featu
 
 gaz <- gaz_raw %>% 
   select(FEATURE_ID:STATE_ALPHA, COUNTY_NAME, ends_with("_DEC"), ELEV_IN_M, MAP_NAME:DATE_EDITED)
-#View(gaz)
 
 ```
 
@@ -54,7 +52,8 @@ gaz <- type_convert(gaz, col_types = cols(
   DATE_CREATED = col_date(format = "%m/%d/%Y"),
   DATE_EDITED = col_date(format = "%m/%d/%Y")
 ))
-#head(gaz) #Check conversion worked
+
+head(gaz) #Check that conversions worked
 
 ```
 
@@ -66,15 +65,12 @@ gaz <- gaz %>%
   filter(STATE_ALPHA == "CA") %>% 
   filter(PRIM_LAT_DEC != 0, PRIM_LONG_DEC != 0)
 
-gaz$FEATURE_NAME <- as.factor(gaz$FEATURE_NAME) # Type convert to a factor
-gaz$FEATURE_CLASS <- as.factor(gaz$FEATURE_CLASS) # Type convert to a factor
-#View(gaz)
-
 ```
 
-5. Create a connect to the gaz.db and copy the tibble into the database.
 
-```{r database, messsage = F, warning = F}
+5. Create a connection to the database and add gaz.
+
+```{r database, message = F, warning = F}
 
 gaz.db <- DBI::dbConnect(RSQLite::SQLite(), path = ":memory:")
 
@@ -92,12 +88,16 @@ gaz_db
 
 ```
 
-##Analyze the Data with SQL
+## Analyze the Data
 
-1. What is the most frequently ocurring feature name?
+1. What is the most frequenty appearing feature name?
 
 ```{r feature_name, message = F, warning = F}
 
+# Type convert to a factor
+gaz_db$FEATURE_NAME <- as.factor(gaz_db$FEATURE_NAME)
+
+# Count and arrange names in descending order
 count_names <- dbGetQuery(gaz.db, "SELECT FEATURE_NAME, COUNT() AS n_names FROM gaz
            GROUP BY FEATURE_NAME
            ORDER BY n_names DESC;")
@@ -108,7 +108,7 @@ count_names
 
 The feature name that appears the most often is "Church of Christ".
 
-2. What is the least-frequently-occuring feature class?
+2. What is the least frequently occuring feature class?
 
 ```{r feature_class, message = F, warning = F}
 
@@ -116,6 +116,7 @@ count_class <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS, COUNT() AS n_classes FR
                           GROUP BY FEATURE_CLASS
                           ORDER BY n_classes;")
 count_class
+
 ```
 
 The feature classes that appear the least are "Sea" and "Isthmus".
@@ -124,53 +125,120 @@ The feature classes that appear the least are "Sea" and "Isthmus".
 
 Instead of finding the bounding box and calculating the center point, I chose to take the average latitude and longitude for each county. With such a large sample size for each county, this should be close to center point.
 
-```{r center}
+```{r center, warning = F, message = F}
 
 county_center <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County Name', AVG(PRIM_LAT_DEC) AS 'Center Latitude', AVG(PRIM_LONG_DEC) AS 'Center Longitude' FROM gaz GROUP BY COUNTY_NAME;")
-county_center
+
+county_center # Get rid of NA
 
 ```
 
 4. What are the fractions of the total number of features in each county that are natural vs. man-made?
 
-```{r fractions}
+```{r feature_type, message = F, warning = F}
 
 # Isolate the unique feature classes
-classes <- gaz %>% 
-  distinct(FEATURE_CLASS) %>% 
-  arrange(FEATURE_CLASS)
+classes <- dbGetQuery(gaz.db,"SELECT FEATURE_CLASS FROM gaz
+                      GROUP BY FEATURE_CLASS
+                      ORDER BY FEATURE_CLASS;")
+
+classes
+
+# Add classes to the database
+copy_to(gaz.db, classes, "classes_db",
+  temporary = FALSE, 
+  overwrite = TRUE
+)
+
+# Create a cookie to talk to the table
+classes_db <- tbl(gaz.db, "classes_db")
 
 # Create a new tibble that defines each class as natural or manmade
 types <- mutate(classes,
                 Class_Type = c("Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Natural", "Manmade", "Manmade", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Natural", "Manmade", "Manmade", "Natural", "Manmade", "Natural", "Natural", "Natural", "Natural", "Natural", "Natural", "Manmade", "Manmade", "Manmade", "Natural", "Manmade", "Natural")
 )
 
-# Import types into database
-copy_to(gaz.db, types, "types",
+# Add types to the database
+copy_to(gaz.db, types, "types_db",
   temporary = FALSE, 
   overwrite = TRUE
 )
 
-# Join types to gaz table and select desired columns
-class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, gaz.COUNTY_NAME, types.Class_Type FROM gaz JOIN types ON gaz.FEATURE_CLASS = types.FEATURE_CLASS;")
-# head(class_types)
+# Create a cookie to talk to the table
+types_db <- tbl(gaz.db, "types_db")
 
-# Put new table in database
-copy_to(gaz.db, class_types, "class_types",
+# Join to gaz, select desired columns
+class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, gaz.COUNTY_NAME, types_db.Class_Type FROM gaz JOIN types_db ON gaz.FEATURE_CLASS = types_db.FEATURE_CLASS;")
+
+class_types
+
+# Type convert county name to a factor
+class_types$COUNTY_NAME <- as.factor(class_types$COUNTY_NAME)
+
+copy_to(gaz.db, class_types, "class_types_db",
   temporary = FALSE, 
   overwrite = TRUE
 )
 
-# Find the fractions of manmade vs. natural features for each county
-feature_fractions <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS, count(FEATURE_CLASS) FROM class_types WHERE Class_Type ='Manmade' GROUP BY COUNTY_NAME;")
-feature_fractions
+# Create a cookie to talk to the table
+class_types_db <- tbl(gaz.db, "class_types_db")
+class_types_db
 
-# I had trouble getting past this point
+# Find fractions of natural and manmade features for each county
+feature_fractions <- class_types %>%
+  group_by(COUNTY_NAME) %>% 
+  summarize(Manmade = sum(Class_Type == "Manmade"), Natural = sum(Class_Type == "Natural")) %>% 
+  mutate(
+    Fraction_Manmade = (Manmade / (Manmade + Natural)),
+    Fraction_Natural = 1 - Fraction_Manmade
+  ) %>% 
+  select(COUNTY_NAME, Fraction_Manmade, Fraction_Natural)
 
-# In order to get showquery to work, the code must be done on the table that exists in the database
-# Copy HW2, put table in DB and run the same code
+show_query(class_types)
 
+features <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type) AS 'Manmade' FROM class_types_db WHERE Class_Type = 'Manmade' AND COUNTY_NAME != 'NA' GROUP BY COUNTY_NAME;")
+features
+
+
+
+#SELECT sum(reading) FROM Survey WHERE quant='sal';
 ```
+
+If you divided 2 integers in SQL, the result is also an integer; i.e., the fractional part is discarded. (For example, 9 / 10 is 0). To get a fractional result in such a situation, you have to convert at least one of the integer operands to a real number using the CAST function, like so:
+SELECT CAST(n_natural AS REAL) / total AS fraction_natural
+
+What are the fractions of the total number of features in each county that are natural? man-made?
+
+select manmade features in each county, divide by total features in each county, report as fraction
+report natural fraction as 1-manmade
+
+Columns: 
+county, fraction manmade, fraction natural
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
