@@ -184,20 +184,37 @@ copy_to(gaz.db, class_types, "class_types_db",
 class_types_db <- tbl(gaz.db, "class_types_db")
 class_types_db
 
-# Find fractions of natural and manmade features for each county
-feature_fractions <- class_types %>%
-  group_by(COUNTY_NAME) %>% 
-  summarize(Manmade = sum(Class_Type == "Manmade"), Natural = sum(Class_Type == "Natural")) %>% 
-  mutate(
-    Fraction_Manmade = (Manmade / (Manmade + Natural)),
-    Fraction_Natural = 1 - Fraction_Manmade
-  ) %>% 
-  select(COUNTY_NAME, Fraction_Manmade, Fraction_Natural)
+# Pull the different metrics you need
+manmade <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type) AS 'Manmade' FROM class_types_db WHERE Class_Type = 'Manmade' AND COUNTY_NAME != 'NA' GROUP BY COUNTY_NAME;")
+manmade
 
-show_query(class_types)
+# Add to the database
+copy_to(gaz.db, manmade, "manmade",
+  temporary = FALSE, 
+  overwrite = TRUE
+)
 
-features <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type) AS 'Manmade' FROM class_types_db WHERE Class_Type = 'Manmade' AND COUNTY_NAME != 'NA' GROUP BY COUNTY_NAME;")
-features
+# Create a cookie to talk to the table
+manmade_db <- tbl(gaz.db, "manmade_db")
+
+natural <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type) AS 'Natural' FROM class_types_db WHERE Class_Type = 'Natural' AND COUNTY_NAME != 'NA' GROUP BY COUNTY_NAME;")
+
+# Add to the database
+copy_to(gaz.db, natural, "natural_db",
+  temporary = FALSE, 
+  overwrite = TRUE
+)
+
+# Create a cookie to talk to the table
+natural_db <- tbl(gaz.db, "natural_db")
+
+# Join these and calculate the fractions
+fractions <- dbGetQuery(gaz.db, "SELECT manmade_db.County, CAST(manmade_db.Manmade AS REAL)/(manmade_db.Manmade + natural_db.Natural) AS 'Fraction Manmade', CAST(natural_db.Natural AS REAL)/(manmade_db.Manmade + natural_db.Natural) AS 'Fraction Natural' FROM manmade_db JOIN natural_db ON manmade_db.County = natural_db.County;")
+
+fractions
+
+```
+Potential subquery joining to solve this problem?
 
 features3 <- dbGetQuery(gaz.db, "SELECT class_types_db.COUNTY_NAME AS 'County', count(class_types_db.Class_Type) AS 'Manmade' FROM class_types_db WHERE class_types_db.Class_Type = 'Manmade' AND class_types_db.COUNTY_NAME != 'NA' GROUP BY class_types_db.COUNTY_NAME
                         JOIN (SELECT count(class_types_db.Class_Type) AS 'Natural' 
@@ -206,13 +223,5 @@ features3 <- dbGetQuery(gaz.db, "SELECT class_types_db.COUNTY_NAME AS 'County', 
                         AND class_types_db.COUNTY_NAME != 'NA' 
                         GROUP BY class_types_db.COUNTY_NAME)
                         ON class_types_db.COUNTY_NAME = class_types_db.COUNTY_NAME;")
-
-
-features3
-
-# I think the way to solve this is with subqueries, but I cannot get it to work.
-
-```
-
 
 
