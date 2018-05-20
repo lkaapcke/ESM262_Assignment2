@@ -214,14 +214,6 @@ fractions <- dbGetQuery(gaz.db, "SELECT manmade_db.County, CAST(manmade_db.Manma
 fractions
 
 ```
-Potential subquery joining to solve this problem?
 
-features3 <- dbGetQuery(gaz.db, "SELECT class_types_db.COUNTY_NAME AS 'County', count(class_types_db.Class_Type) AS 'Manmade' FROM class_types_db WHERE class_types_db.Class_Type = 'Manmade' AND class_types_db.COUNTY_NAME != 'NA' GROUP BY class_types_db.COUNTY_NAME
-                        JOIN (SELECT count(class_types_db.Class_Type) AS 'Natural' 
-                        FROM class_types_db 
-                        WHERE class_types_db.Class_Type = 'Natural' 
-                        AND class_types_db.COUNTY_NAME != 'NA' 
-                        GROUP BY class_types_db.COUNTY_NAME)
-                        ON class_types_db.COUNTY_NAME = class_types_db.COUNTY_NAME;")
 
 
