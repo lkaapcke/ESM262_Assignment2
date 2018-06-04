@@ -21,7 +21,11 @@ library(DBI)
 library(dplyr)
 
 #Read in data
-gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Features_20180401.txt", delim = "|", col_names = T, col_types = cols(.default = col_character())))
+gaz_raw <- as_tibble(
+  read_delim(
+    "CA_Features_20180401.txt", 
+    delim = "|", col_names = T, 
+    col_types = cols(.default = col_character())))
 
 ```
 
@@ -30,7 +34,13 @@ gaz_raw <- as_tibble(read_delim("C:/Users/lnkaa/Documents/ESM Computing/CA_Featu
 ```{r table, warning = F, message = F}
 
 gaz <- gaz_raw %>% 
-  select(FEATURE_ID:STATE_ALPHA, COUNTY_NAME, ends_with("_DEC"), ELEV_IN_M, MAP_NAME:DATE_EDITED)
+  select(FEATURE_ID:STATE_ALPHA, 
+         COUNTY_NAME, 
+         ends_with("_DEC"), 
+         ELEV_IN_M, 
+         MAP_NAME:DATE_EDITED)
+gaz
+
 
 ```
 
@@ -38,22 +48,22 @@ gaz <- gaz_raw %>%
 
 ```{r convert, warning = F, message = F}
 
-#Replace "Unknown" with "NA"
-is.na(gaz) <- gaz == "Unknown"
+# Convert columns
+gaz$FEATURE_ID      = parse_integer(gaz$FEATURE_ID)
+gaz$PRIM_LAT_DEC    = parse_double(gaz$PRIM_LAT_DEC)
+gaz$PRIM_LONG_DEC   = parse_double(gaz$PRIM_LONG_DEC)
+gaz$SOURCE_LAT_DEC  = parse_double(gaz$SOURCE_LAT_DEC)
+gaz$SOURCE_LONG_DEC = parse_double(gaz$SOURCE_LONG_DEC)
+gaz$ELEV_IN_M       = parse_integer(gaz$ELEV_IN_M)
+gaz$DATE_CREATED    = parse_date(gaz$DATE_CREATED, format = "%m/%d/%Y")
+gaz$DATE_EDITED     = parse_date(gaz$DATE_EDITED, format = "%m/%d/%Y")
 
-#Convert columns
-gaz <- type_convert(gaz, col_types = cols( 
-  FEATURE_ID = col_double(),
-  PRIM_LAT_DEC = col_double(),
-  PRIM_LONG_DEC = col_double(),
-  SOURCE_LAT_DEC = col_double(),
-  SOURCE_LONG_DEC = col_double(),
-  ELEV_IN_M = col_double(),
-  DATE_CREATED = col_date(format = "%m/%d/%Y"),
-  DATE_EDITED = col_date(format = "%m/%d/%Y")
-))
+# Specify NA values
+is.na(gaz$MAP_NAME)      <- gaz$MAP_NAME == "Unknown"
+is.na(gaz$PRIM_LAT_DEC)  <- gaz$PRIM_LAT_DEC == 0
+is.na(gaz$PRIM_LONG_DEC) <- gaz$PRIM_LONG_DEC == 0
 
-head(gaz) #Check that conversions worked
+head(gaz) #Check that type conversions worked
 
 ```
 
@@ -61,9 +71,13 @@ head(gaz) #Check that conversions worked
 
 ```{r filter, message = F, warning = F}
 
-gaz <- gaz %>%
-  filter(STATE_ALPHA == "CA") %>% 
-  filter(PRIM_LAT_DEC != 0, PRIM_LONG_DEC != 0)
+# Filter for CA and remove NA values
+gaz <- filter(gaz,
+              STATE_ALPHA == "CA" &
+              !is.na(PRIM_LAT_DEC) &
+              !is.na(PRIM_LONG_DEC))
+           
+gaz
 
 ```
 
@@ -94,15 +108,12 @@ gaz_db
 
 ```{r feature_name, message = F, warning = F}
 
-# Type convert to a factor
-gaz_db$FEATURE_NAME <- as.factor(gaz_db$FEATURE_NAME)
+max_name <- dbGetQuery(gaz.db, "SELECT FEATURE_NAME AS 'Feature Name', MAX(y.num) AS Count
+  FROM (SELECT FEATURE_NAME, COUNT() AS num
+    FROM gaz
+    GROUP BY FEATURE_NAME) y;")
 
-# Count and arrange names in descending order
-count_names <- dbGetQuery(gaz.db, "SELECT FEATURE_NAME, COUNT() AS n_names FROM gaz
-           GROUP BY FEATURE_NAME
-           ORDER BY n_names DESC;")
-
-count_names
+max_name
 
 ```
 
@@ -112,10 +123,12 @@ The feature name that appears the most often is "Church of Christ".
 
 ```{r feature_class, message = F, warning = F}
 
-count_class <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS, COUNT() AS n_classes FROM gaz
+count_class <- dbGetQuery(gaz.db, "SELECT FEATURE_CLASS AS 'Feature Class', COUNT() AS n_classes                             FROM gaz
                           GROUP BY FEATURE_CLASS
                           ORDER BY n_classes;")
 count_class
+
+# When filtering for min, it would only return 1 value :(
 
 ```
 
@@ -123,14 +136,16 @@ The feature classes that appear the least are "Sea" and "Isthmus".
 
 3. What is the approximate center point of each county?
 
-Instead of finding the bounding box and calculating the center point, I chose to take the average latitude and longitude for each county. With such a large sample size for each county, this should be close to center point.
-
 ```{r center, warning = F, message = F}
 
-county_center <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County Name', AVG(PRIM_LAT_DEC) AS 'Center Latitude', AVG(PRIM_LONG_DEC) AS 'Center Longitude' FROM gaz GROUP BY COUNTY_NAME;")
-
-county_center # Get rid of NA
-
+center <- dbGetQuery(gaz.db, "SELECT 
+                     COUNTY_NAME AS 'County Name',
+                     (MIN(PRIM_LAT_DEC)+MAX(PRIM_LAT_DEC))/2 AS 'Center Latitude',
+                     (MIN(PRIM_LONG_DEC)+MAX(PRIM_LONG_DEC))/2 AS 'Center Longitude'
+                     FROM gaz 
+                     WHERE COUNTY_NAME IS NOT NULL
+                     GROUP BY COUNTY_NAME")
+center
 ```
 
 4. What are the fractions of the total number of features in each county that are natural vs. man-made?
@@ -172,9 +187,6 @@ class_types <- dbGetQuery(gaz.db, "SELECT gaz.FEATURE_NAME, gaz.FEATURE_CLASS, g
 
 class_types
 
-# Type convert county name to a factor
-class_types$COUNTY_NAME <- as.factor(class_types$COUNTY_NAME)
-
 copy_to(gaz.db, class_types, "class_types_db",
   temporary = FALSE, 
   overwrite = TRUE
@@ -189,7 +201,7 @@ manmade <- dbGetQuery(gaz.db, "SELECT COUNTY_NAME AS 'County', count(Class_Type)
 manmade
 
 # Add to the database
-copy_to(gaz.db, manmade, "manmade",
+copy_to(gaz.db, manmade, "manmade_db",
   temporary = FALSE, 
   overwrite = TRUE
 )
